@@ -45,7 +45,7 @@ print(f"  Target Table: {BRONZE_TABLE}")
 # COMMAND ----------
 
 from pyspark.sql.functions import (
-    col, lit, current_timestamp, input_file_name,
+    col, lit, current_timestamp,
     to_timestamp, regexp_replace, trim
 )
 from pyspark.sql.types import (
@@ -131,7 +131,7 @@ df_bronze = (
     .withColumn("user_session", trim(col("user_session")))
     # Add audit columns
     .withColumn("ingestion_timestamp", current_timestamp())
-    .withColumn("source_file", input_file_name())
+    .withColumn("source_file", col("_metadata.file_path"))
     .withColumn("created_at", current_timestamp())
 )
 

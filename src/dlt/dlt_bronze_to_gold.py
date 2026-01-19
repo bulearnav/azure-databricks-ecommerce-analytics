@@ -26,7 +26,7 @@ import dlt
 from pyspark.sql.functions import (
     col, lit, when, count, countDistinct, sum as spark_sum,
     avg, min as spark_min, max as spark_max,
-    current_timestamp, input_file_name, to_timestamp,
+    current_timestamp, to_timestamp,
     regexp_replace, trim, lower, to_date, hour, dayofweek,
     dayofmonth, month, year, weekofyear, split, size,
     sha2, concat, row_number, first, datediff, current_date,
@@ -89,7 +89,7 @@ def bronze_events_raw():
         )
         # Add audit columns
         .withColumn("ingestion_timestamp", current_timestamp())
-        .withColumn("source_file", input_file_name())
+        .withColumn("source_file", col("_metadata.file_path"))
         .withColumn("created_at", current_timestamp())
     )
 
