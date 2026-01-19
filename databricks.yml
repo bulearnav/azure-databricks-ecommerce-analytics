@@ -17,7 +17,7 @@ include:
 
 # Workspace configuration - SINGLE WORKSPACE for all environments
 workspace:
-  host: ${var.databricks_host}
+  host: "https://dbc-2c8dd9b5-ccab.cloud.databricks.com"
 
 # Variables used across all targets
 variables:
