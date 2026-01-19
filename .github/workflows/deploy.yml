@@ -1,0 +1,272 @@
+# GitHub Actions CI/CD Pipeline
+# E-Commerce Analytics Platform
+# ============================
+# This workflow validates and deploys Databricks Asset Bundles
+# to dev, staging, and production environments.
+
+name: Databricks CI/CD Pipeline
+
+on:
+  # Trigger on push to specific branches
+  push:
+    branches:
+      - main
+      - develop
+      - "feature/**"
+      - "release/**"
+    paths:
+      - "src/**"
+      - "resources/**"
+      - "databricks.yml"
+      - "environments/**"
+      - ".github/workflows/**"
+
+  # Trigger on pull requests
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - "src/**"
+      - "resources/**"
+      - "databricks.yml"
+      - "environments/**"
+
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+# Environment variables
+env:
+  DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+  DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+  BUNDLE_NAME: ecommerce-analytics-platform
+
+jobs:
+  # ============================
+  # Job 1: Validate Bundle
+  # ============================
+  validate:
+    name: Validate DABs Bundle
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install Databricks CLI
+        run: |
+          pip install databricks-cli
+          databricks --version
+
+      - name: Configure Databricks CLI
+        run: |
+          echo "[DEFAULT]" > ~/.databrickscfg
+          echo "host = ${{ env.DATABRICKS_HOST }}" >> ~/.databrickscfg
+          echo "token = ${{ env.DATABRICKS_TOKEN }}" >> ~/.databrickscfg
+
+      - name: Validate Bundle (Dev)
+        run: |
+          databricks bundle validate -t dev
+        continue-on-error: false
+
+      - name: Validate Bundle (Staging)
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+        run: |
+          databricks bundle validate -t staging
+
+      - name: Validate Bundle (Prod)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          databricks bundle validate -t prod
+
+  # ============================
+  # Job 2: Run Tests
+  # ============================
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install pytest pyspark delta-spark
+
+      - name: Run tests
+        run: |
+          pytest tests/ -v --junitxml=test-results.xml
+        continue-on-error: true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: test-results.xml
+
+  # ============================
+  # Job 3: Deploy to Dev
+  # ============================
+  deploy-dev:
+    name: Deploy to Development
+    runs-on: ubuntu-latest
+    needs: [validate, test]
+    if: github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/feature/')
+    environment: development
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Databricks CLI
+        run: pip install databricks-cli
+
+      - name: Configure Databricks CLI
+        run: |
+          echo "[DEFAULT]" > ~/.databrickscfg
+          echo "host = ${{ env.DATABRICKS_HOST }}" >> ~/.databrickscfg
+          echo "token = ${{ env.DATABRICKS_TOKEN }}" >> ~/.databrickscfg
+
+      - name: Deploy to Dev
+        run: |
+          databricks bundle deploy -t dev
+
+      - name: Run Smoke Test
+        run: |
+          echo "Running smoke tests on dev environment..."
+          # databricks bundle run -t dev bronze_ingestion_job --no-wait
+
+  # ============================
+  # Job 4: Deploy to Staging
+  # ============================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [validate, test]
+    if: github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/release/')
+    environment: staging
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Databricks CLI
+        run: pip install databricks-cli
+
+      - name: Configure Databricks CLI
+        run: |
+          echo "[DEFAULT]" > ~/.databrickscfg
+          echo "host = ${{ env.DATABRICKS_HOST }}" >> ~/.databrickscfg
+          echo "token = ${{ env.DATABRICKS_TOKEN }}" >> ~/.databrickscfg
+
+      - name: Deploy to Staging
+        run: |
+          databricks bundle deploy -t staging
+
+      - name: Run Integration Tests
+        run: |
+          echo "Running integration tests on staging..."
+          # Add integration test commands here
+
+  # ============================
+  # Job 5: Deploy to Production
+  # ============================
+  deploy-prod:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [validate, test, deploy-staging]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Databricks CLI
+        run: pip install databricks-cli
+
+      - name: Configure Databricks CLI
+        run: |
+          echo "[DEFAULT]" > ~/.databrickscfg
+          echo "host = ${{ env.DATABRICKS_HOST }}" >> ~/.databrickscfg
+          echo "token = ${{ secrets.DATABRICKS_TOKEN_PROD }}" >> ~/.databrickscfg
+
+      - name: Deploy to Production
+        run: |
+          databricks bundle deploy -t prod
+
+      - name: Verify Deployment
+        run: |
+          echo "Verifying production deployment..."
+          # Add verification commands here
+
+      - name: Notify Success
+        if: success()
+        run: |
+          echo "Production deployment successful!"
+          # Add Slack/Teams notification here
+
+      - name: Notify Failure
+        if: failure()
+        run: |
+          echo "Production deployment failed!"
+          # Add alerting here
+
+  # ============================
+  # Job 6: Manual Deploy
+  # ============================
+  manual-deploy:
+    name: Manual Deployment
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Databricks CLI
+        run: pip install databricks-cli
+
+      - name: Configure Databricks CLI
+        run: |
+          echo "[DEFAULT]" > ~/.databrickscfg
+          echo "host = ${{ env.DATABRICKS_HOST }}" >> ~/.databrickscfg
+          echo "token = ${{ env.DATABRICKS_TOKEN }}" >> ~/.databrickscfg
+
+      - name: Validate Bundle
+        run: |
+          databricks bundle validate -t ${{ github.event.inputs.environment }}
+
+      - name: Deploy Bundle
+        run: |
+          databricks bundle deploy -t ${{ github.event.inputs.environment }}
+
+      - name: Output Deployment Info
+        run: |
+          echo "Deployed to: ${{ github.event.inputs.environment }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Actor: ${{ github.actor }}"

@@ -1,0 +1,311 @@
+# Databricks Asset Bundles - Jobs Configuration
+# ============================================
+# Defines all workflow jobs for the e-commerce analytics platform.
+# Configured to work with Databricks Free Trial using serverless compute.
+
+resources:
+  jobs:
+    # =============================================
+    # Bronze Ingestion Job
+    # =============================================
+    bronze_ingestion_job:
+      name: "[${bundle.target}] Bronze - CSV Ingestion"
+      description: "Ingest raw CSV files from Unity Catalog volume into Bronze Delta table"
+
+      schedule:
+        quartz_cron_expression: "0 0 1 * * ?" # Daily at 1 AM
+        timezone_id: "UTC"
+        pause_status: PAUSED # Start paused, enable in production
+
+      email_notifications:
+        on_failure:
+          - data-engineering@company.com
+
+      tags:
+        layer: bronze
+        environment: ${bundle.target}
+
+      tasks:
+        - task_key: ingest_csv_to_bronze
+          notebook_task:
+            notebook_path: ../src/bronze/ingest_events_csv.py
+            base_parameters:
+              catalog: ${var.catalog_name}
+              schema_bronze: ${var.schema_bronze}
+              volume_path: ${var.volume_raw_data}
+            # Use serverless compute (Free Trial compatible)
+            warehouse_id: ${var.warehouse_id}
+
+          timeout_seconds: 3600 # 1 hour
+          max_retries: 2
+
+    # =============================================
+    # Silver Transformation Job
+    # =============================================
+    silver_transformation_job:
+      name: "[${bundle.target}] Silver - Events Transformation"
+      description: "Transform Bronze events to cleaned Silver table"
+
+      schedule:
+        quartz_cron_expression: "0 30 1 * * ?" # Daily at 1:30 AM (after Bronze)
+        timezone_id: "UTC"
+        pause_status: PAUSED
+
+      email_notifications:
+        on_failure:
+          - data-engineering@company.com
+
+      tags:
+        layer: silver
+        environment: ${bundle.target}
+
+      tasks:
+        - task_key: transform_events_to_silver
+          notebook_task:
+            notebook_path: ../src/silver/transform_events_cleaned.py
+            base_parameters:
+              catalog: ${var.catalog_name}
+              schema_bronze: ${var.schema_bronze}
+              schema_silver: ${var.schema_silver}
+            warehouse_id: ${var.warehouse_id}
+
+          timeout_seconds: 7200 # 2 hours
+          max_retries: 2
+
+    # =============================================
+    # Gold Aggregation Job
+    # =============================================
+    gold_aggregation_job:
+      name: "[${bundle.target}] Gold - Business Metrics"
+      description: "Generate Gold layer business aggregations"
+
+      schedule:
+        quartz_cron_expression: "0 0 3 * * ?" # Daily at 3 AM (after Silver)
+        timezone_id: "UTC"
+        pause_status: PAUSED
+
+      email_notifications:
+        on_failure:
+          - data-engineering@company.com
+        on_success:
+          - data-analytics@company.com
+
+      tags:
+        layer: gold
+        environment: ${bundle.target}
+
+      tasks:
+        - task_key: customer_metrics
+          notebook_task:
+            notebook_path: ../src/gold/agg_customer_metrics.py
+            base_parameters:
+              catalog: ${var.catalog_name}
+              schema_silver: ${var.schema_silver}
+              schema_gold: ${var.schema_gold}
+            warehouse_id: ${var.warehouse_id}
+
+          timeout_seconds: 3600
+          max_retries: 1
+
+        - task_key: product_performance
+          depends_on:
+            - task_key: customer_metrics
+          notebook_task:
+            notebook_path: ../src/gold/agg_product_performance.py
+            base_parameters:
+              catalog: ${var.catalog_name}
+              schema_silver: ${var.schema_silver}
+              schema_gold: ${var.schema_gold}
+            warehouse_id: ${var.warehouse_id}
+
+          timeout_seconds: 3600
+          max_retries: 1
+
+        - task_key: daily_sales
+          depends_on:
+            - task_key: customer_metrics
+          notebook_task:
+            notebook_path: ../src/gold/agg_daily_sales.py
+            base_parameters:
+              catalog: ${var.catalog_name}
+              schema_silver: ${var.schema_silver}
+              schema_gold: ${var.schema_gold}
+            warehouse_id: ${var.warehouse_id}
+
+          timeout_seconds: 1800
+          max_retries: 1
+
+        - task_key: conversion_funnel
+          depends_on:
+            - task_key: product_performance
+            - task_key: daily_sales
+          notebook_task:
+            notebook_path: ../src/gold/agg_conversion_funnel.py
+            base_parameters:
+              catalog: ${var.catalog_name}
+              schema_silver: ${var.schema_silver}
+              schema_gold: ${var.schema_gold}
+            warehouse_id: ${var.warehouse_id}
+
+          timeout_seconds: 1800
+          max_retries: 1
+
+    # =============================================
+    # Full Pipeline Orchestration Job
+    # =============================================
+    full_pipeline_job:
+      name: "[${bundle.target}] Full Pipeline - Bronze to Gold"
+      description: "Complete data pipeline from Bronze ingestion to Gold aggregations"
+
+      schedule:
+        quartz_cron_expression: "0 0 0 * * ?" # Daily at midnight
+        timezone_id: "UTC"
+        pause_status: PAUSED
+
+      email_notifications:
+        on_start:
+          - data-engineering@company.com
+        on_failure:
+          - data-engineering@company.com
+          - oncall@company.com
+        on_success:
+          - data-analytics@company.com
+
+      tags:
+        pipeline: full
+        environment: ${bundle.target}
+
+      tasks:
+        # Bronze Layer
+        - task_key: bronze_ingestion
+          notebook_task:
+            notebook_path: ../src/bronze/ingest_events_csv.py
+            base_parameters:
+              catalog: ${var.catalog_name}
+              schema_bronze: ${var.schema_bronze}
+              volume_path: ${var.volume_raw_data}
+            warehouse_id: ${var.warehouse_id}
+
+          timeout_seconds: 3600
+          max_retries: 2
+
+        # Silver Layer
+        - task_key: silver_transformation
+          depends_on:
+            - task_key: bronze_ingestion
+          notebook_task:
+            notebook_path: ../src/silver/transform_events_cleaned.py
+            base_parameters:
+              catalog: ${var.catalog_name}
+              schema_bronze: ${var.schema_bronze}
+              schema_silver: ${var.schema_silver}
+            warehouse_id: ${var.warehouse_id}
+
+          timeout_seconds: 7200
+          max_retries: 2
+
+        # Gold Layer - Parallel execution
+        - task_key: gold_customer_metrics
+          depends_on:
+            - task_key: silver_transformation
+          notebook_task:
+            notebook_path: ../src/gold/agg_customer_metrics.py
+            base_parameters:
+              catalog: ${var.catalog_name}
+              schema_silver: ${var.schema_silver}
+              schema_gold: ${var.schema_gold}
+            warehouse_id: ${var.warehouse_id}
+
+          timeout_seconds: 3600
+
+        - task_key: gold_product_performance
+          depends_on:
+            - task_key: silver_transformation
+          notebook_task:
+            notebook_path: ../src/gold/agg_product_performance.py
+            base_parameters:
+              catalog: ${var.catalog_name}
+              schema_silver: ${var.schema_silver}
+              schema_gold: ${var.schema_gold}
+            warehouse_id: ${var.warehouse_id}
+
+          timeout_seconds: 3600
+
+        - task_key: gold_daily_sales
+          depends_on:
+            - task_key: silver_transformation
+          notebook_task:
+            notebook_path: ../src/gold/agg_daily_sales.py
+            base_parameters:
+              catalog: ${var.catalog_name}
+              schema_silver: ${var.schema_silver}
+              schema_gold: ${var.schema_gold}
+            warehouse_id: ${var.warehouse_id}
+
+          timeout_seconds: 1800
+
+        - task_key: gold_conversion_funnel
+          depends_on:
+            - task_key: gold_customer_metrics
+            - task_key: gold_product_performance
+            - task_key: gold_daily_sales
+          notebook_task:
+            notebook_path: ../src/gold/agg_conversion_funnel.py
+            base_parameters:
+              catalog: ${var.catalog_name}
+              schema_silver: ${var.schema_silver}
+              schema_gold: ${var.schema_gold}
+            warehouse_id: ${var.warehouse_id}
+
+          timeout_seconds: 1800
+
+    # =============================================
+    # Streaming Job (Auto Loader) - Uses Job Cluster
+    # =============================================
+    streaming_ingestion_job:
+      name: "[${bundle.target}] Streaming - Auto Loader Ingestion"
+      description: "Continuous streaming ingestion using Auto Loader"
+
+      # No schedule - triggered manually or by external event
+
+      email_notifications:
+        on_failure:
+          - data-engineering@company.com
+
+      tags:
+        type: streaming
+        environment: ${bundle.target}
+
+      tasks:
+        - task_key: stream_events
+          notebook_task:
+            notebook_path: ../src/streaming/stream_events_autoloader.py
+            base_parameters:
+              catalog: ${var.catalog_name}
+              schema_bronze: ${var.schema_bronze}
+              volume_path: ${var.volume_raw_data}
+              trigger_mode: "availableNow"
+
+          # Streaming requires job cluster (not serverless)
+          # For free trial, run this manually via shared cluster
+          job_cluster_key: streaming_cluster
+
+          timeout_seconds: 7200
+          max_retries: 1
+
+  # Job clusters (only used for streaming which needs full Spark)
+  job_clusters:
+    - job_cluster_key: streaming_cluster
+      new_cluster:
+        spark_version: "14.3.x-scala2.12"
+        num_workers: 0
+        spark_conf:
+          spark.databricks.cluster.profile: singleNode
+          spark.master: "local[*]"
+          spark.databricks.delta.preview.enabled: "true"
+        data_security_mode: SINGLE_USER
+        # Use smallest available node
+        node_type_id: Standard_DS3_v2
+        custom_tags:
+          job: streaming
+          environment: ${bundle.target}

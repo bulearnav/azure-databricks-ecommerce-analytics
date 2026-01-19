@@ -1,0 +1,65 @@
+# Production Environment Configuration
+# =====================================
+# This file contains environment-specific settings for production.
+# Production uses full resources and strict governance.
+
+environment:
+  name: prod
+  description: "Production environment for live workloads"
+
+# Unity Catalog Settings
+catalog:
+  name: ecommerce_analytics_prod
+  schemas:
+    bronze: bronze_layer
+    silver: silver_layer
+    gold: gold_layer
+
+# Data Paths
+paths:
+  raw_data_volume: /Volumes/ecommerce_analytics_prod/bronze_layer/raw_data
+  checkpoint_base: /Volumes/ecommerce_analytics_prod/bronze_layer/_checkpoints
+
+# Compute Configuration
+compute:
+  cluster:
+    node_type_id: Standard_DS5_v2
+    min_workers: 2
+    max_workers: 8
+    spark_version: "14.3.x-scala2.12"
+    autotermination_minutes: 120
+    data_security_mode: USER_ISOLATION
+
+  photon_enabled: true
+
+# DLT Pipeline Settings
+dlt:
+  development: false
+  continuous: true
+  channel: CURRENT
+
+# Monitoring & Alerting
+monitoring:
+  email_notifications:
+    - prod-alerts@company.com
+    - data-engineering@company.com
+  slack_webhook: "https://hooks.slack.com/services/xxx/yyy/zzz"
+
+# Feature Flags
+features:
+  enable_streaming: true
+  enable_ml: true
+  debug_mode: false
+
+# Production-specific settings
+production:
+  # Service Principal for job execution
+  service_principal_name: "ecommerce-analytics-sp"
+
+  # Retention policies
+  data_retention_days: 365
+  time_travel_days: 30
+
+  # Performance settings
+  optimize_frequency: "daily"
+  vacuum_frequency: "weekly"

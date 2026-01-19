@@ -1,0 +1,151 @@
+# Databricks Asset Bundles - DLT Pipelines Configuration
+# ======================================================
+# Configured for Databricks Free Trial with Serverless DLT
+
+resources:
+  pipelines:
+    # =============================================
+    # Main DLT Pipeline - Bronze to Gold (Serverless)
+    # =============================================
+    ecommerce_dlt_pipeline:
+      name: "[${bundle.target}] E-Commerce Analytics - DLT Pipeline"
+
+      # Target catalog and schema for DLT tables
+      catalog: ${var.catalog_name}
+      target: dlt_${var.schema_silver} # Creates tables in dlt_silver_layer schema
+
+      # Pipeline mode for Free Trial
+      development: true # Keeps resources minimal
+      continuous: false # Batch mode (less resource intensive)
+
+      # Enable serverless for Free Trial compatibility
+      serverless: true
+
+      # Channel (CURRENT = stable)
+      channel: CURRENT
+
+      # Notifications (update email to yours)
+      notifications:
+        - email_recipients:
+            - your-email@company.com
+          alerts:
+            - on-update-failure
+            - on-update-fatal-failure
+
+      # Pipeline libraries (notebooks)
+      libraries:
+        - notebook:
+            path: ../src/dlt/dlt_bronze_to_gold.py
+
+      # Configuration passed to notebooks
+      configuration:
+        catalog_name: ${var.catalog_name}
+        schema_bronze: ${var.schema_bronze}
+        schema_silver: ${var.schema_silver}
+        schema_gold: ${var.schema_gold}
+        volume_path: ${var.volume_raw_data}
+
+    # =============================================
+    # Bronze-Only DLT Pipeline (Ingestion)
+    # =============================================
+    bronze_ingestion_dlt_pipeline:
+      name: "[${bundle.target}] Bronze Ingestion - DLT Pipeline"
+
+      catalog: ${var.catalog_name}
+      target: ${var.schema_bronze}
+
+      development: true
+      continuous: false
+      serverless: true
+      channel: CURRENT
+
+      notifications:
+        - email_recipients:
+            - your-email@company.com
+          alerts:
+            - on-update-failure
+
+      libraries:
+        - notebook:
+            path: ../src/dlt/dlt_bronze_to_gold.py
+
+      # Filter to only run bronze tables
+      filters:
+        include:
+          - bronze_events_raw
+
+      configuration:
+        catalog_name: ${var.catalog_name}
+        volume_path: ${var.volume_raw_data}
+
+    # =============================================
+    # Silver-Only DLT Pipeline (Transformation)
+    # =============================================
+    silver_transformation_dlt_pipeline:
+      name: "[${bundle.target}] Silver Transformation - DLT Pipeline"
+
+      catalog: ${var.catalog_name}
+      target: ${var.schema_silver}
+
+      development: true
+      continuous: false
+      serverless: true
+      channel: CURRENT
+
+      notifications:
+        - email_recipients:
+            - your-email@company.com
+          alerts:
+            - on-update-failure
+
+      libraries:
+        - notebook:
+            path: ../src/dlt/dlt_bronze_to_gold.py
+
+      # Filter to only run silver tables
+      filters:
+        include:
+          - silver_events_cleaned
+          - silver_events_quarantine
+
+      configuration:
+        catalog_name: ${var.catalog_name}
+        schema_bronze: ${var.schema_bronze}
+
+    # =============================================
+    # Gold-Only DLT Pipeline (Aggregations)
+    # =============================================
+    gold_aggregation_dlt_pipeline:
+      name: "[${bundle.target}] Gold Aggregations - DLT Pipeline"
+
+      catalog: ${var.catalog_name}
+      target: ${var.schema_gold}
+
+      development: true
+      continuous: false
+      serverless: true
+      channel: CURRENT
+
+      notifications:
+        - email_recipients:
+            - your-email@company.com
+          alerts:
+            - on-update-failure
+            - on-update-success
+
+      libraries:
+        - notebook:
+            path: ../src/dlt/dlt_bronze_to_gold.py
+
+      # Filter to only run gold tables
+      filters:
+        include:
+          - gold_customer_metrics
+          - gold_product_performance
+          - gold_daily_sales
+          - gold_conversion_funnel
+          - gold_data_quality_metrics
+
+      configuration:
+        catalog_name: ${var.catalog_name}
+        schema_silver: ${var.schema_silver}

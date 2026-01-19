@@ -1,0 +1,49 @@
+# Development Environment Configuration
+# =====================================
+# This file contains environment-specific settings for development.
+# These values are referenced in databricks.yml via variable substitution.
+
+environment:
+  name: dev
+  description: "Development environment for testing and iteration"
+
+# Unity Catalog Settings
+catalog:
+  name: ecommerce_analytics_dev
+  schemas:
+    bronze: bronze_layer
+    silver: silver_layer
+    gold: gold_layer
+
+# Data Paths
+paths:
+  raw_data_volume: /Volumes/ecommerce_analytics_dev/bronze_layer/raw_data
+  checkpoint_base: /Volumes/ecommerce_analytics_dev/bronze_layer/_checkpoints
+
+# Compute Configuration
+compute:
+  cluster:
+    node_type_id: Standard_DS3_v2
+    num_workers: 1
+    spark_version: "14.3.x-scala2.12"
+    autotermination_minutes: 30
+    data_security_mode: USER_ISOLATION
+
+  photon_enabled: false
+
+# DLT Pipeline Settings
+dlt:
+  development: true
+  continuous: false
+  channel: CURRENT
+
+# Monitoring & Alerting
+monitoring:
+  email_notifications: []
+  slack_webhook: ""
+
+# Feature Flags
+features:
+  enable_streaming: false
+  enable_ml: false
+  debug_mode: true

@@ -1,0 +1,70 @@
+# Databricks Asset Bundles - Clusters Configuration
+# =================================================
+# For Databricks Free Trial / Serverless:
+# - Interactive notebooks run on serverless compute
+# - Jobs run on serverless SQL Warehouses
+# - DLT pipelines use serverless pipelines
+# - Streaming requires job clusters (defined in jobs.yml)
+#
+# This file contains cluster definitions for scenarios
+# where dedicated compute is needed.
+
+resources:
+  clusters:
+    # =============================================
+    # Development Cluster (Single Node - Free Trial)
+    # =============================================
+    # Use this for interactive development if serverless is unavailable
+    dev_cluster:
+      cluster_name: "[${bundle.target}] E-Commerce Analytics - Dev"
+
+      spark_version: "14.3.x-scala2.12"
+
+      # Single node configuration (free trial friendly)
+      num_workers: 0
+
+      spark_conf:
+        spark.databricks.cluster.profile: singleNode
+        spark.master: "local[*]"
+        spark.databricks.delta.preview.enabled: "true"
+
+      # Auto-terminate quickly to save resources
+      autotermination_minutes: 20
+
+      # Unity Catalog access mode
+      data_security_mode: SINGLE_USER
+      single_user_name: ${workspace.current_user.userName}
+
+      # Use smallest node type
+      node_type_id: Standard_DS3_v2
+
+      custom_tags:
+        environment: ${bundle.target}
+        purpose: development
+        cost_center: data-engineering
+
+# =============================================
+# Notes for Free Trial Users
+# =============================================
+#
+# 1. SERVERLESS COMPUTE (Recommended)
+#    - Notebooks: Run directly in serverless from UI
+#    - Jobs: Use warehouse_id parameter
+#    - DLT: Use serverless DLT pipelines
+#
+# 2. INTERACTIVE CLUSTERS
+#    - Use dev_cluster above for complex operations
+#    - Single-node to minimize costs
+#    - Auto-terminates after 20 minutes
+#
+# 3. SQL WAREHOUSE
+#    - Create a Serverless SQL Warehouse in UI
+#    - Copy the warehouse_id to databricks.yml
+#    - Use for notebook execution in jobs
+#
+# To create a Serverless SQL Warehouse:
+# 1. Go to SQL Warehouses in Databricks UI
+# 2. Click "Create SQL Warehouse"
+# 3. Select "Serverless" type
+# 4. Name it: "ecommerce-analytics-warehouse"
+# 5. Copy the ID for use in configurations

@@ -1,0 +1,50 @@
+# Staging Environment Configuration
+# ==================================
+# This file contains environment-specific settings for staging.
+# Staging mirrors production settings with smaller data volumes.
+
+environment:
+  name: staging
+  description: "Staging environment for pre-production validation"
+
+# Unity Catalog Settings
+catalog:
+  name: ecommerce_analytics_staging
+  schemas:
+    bronze: bronze_layer
+    silver: silver_layer
+    gold: gold_layer
+
+# Data Paths
+paths:
+  raw_data_volume: /Volumes/ecommerce_analytics_staging/bronze_layer/raw_data
+  checkpoint_base: /Volumes/ecommerce_analytics_staging/bronze_layer/_checkpoints
+
+# Compute Configuration
+compute:
+  cluster:
+    node_type_id: Standard_DS4_v2
+    num_workers: 2
+    spark_version: "14.3.x-scala2.12"
+    autotermination_minutes: 60
+    data_security_mode: USER_ISOLATION
+
+  photon_enabled: true
+
+# DLT Pipeline Settings
+dlt:
+  development: false
+  continuous: false
+  channel: CURRENT
+
+# Monitoring & Alerting
+monitoring:
+  email_notifications:
+    - staging-alerts@company.com
+  slack_webhook: ""
+
+# Feature Flags
+features:
+  enable_streaming: true
+  enable_ml: false
+  debug_mode: false
