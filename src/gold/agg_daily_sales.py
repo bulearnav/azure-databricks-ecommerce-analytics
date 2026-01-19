@@ -44,7 +44,7 @@ print(f"  Target: {GOLD_TABLE}")
 
 from pyspark.sql.functions import (
     col, lit, when, count, countDistinct, sum as spark_sum,
-    avg, min as spark_min, max as spark_max,
+    avg, min as spark_min, max as spark_max, first,
     dayofweek, date_format, current_timestamp,
     round as spark_round, lag
 )
