@@ -16,14 +16,12 @@ include:
   - resources/*.yml
 
 # Workspace configuration - SINGLE WORKSPACE for all environments
+# Set your workspace URL here (no variables allowed for host)
 workspace:
   host: "https://dbc-2c8dd9b5-ccab.cloud.databricks.com"
 
 # Variables used across all targets
 variables:
-  databricks_host:
-    description: "Databricks workspace URL (same for all environments)"
-    default: "" # TODO: Set your workspace URL here
   catalog_name:
     description: "Unity Catalog name for this environment"
   schema_bronze:
@@ -39,7 +37,7 @@ variables:
     description: "Volume path for raw CSV data"
   warehouse_id:
     description: "SQL Warehouse ID for serverless execution"
-    default: "" # TODO: Set your SQL Warehouse ID here
+    default: ""
 
 # Environment-specific targets (all in SAME workspace)
 targets:
@@ -53,8 +51,6 @@ targets:
       catalog_name: ecommerce_analytics_dev
       volume_raw_data: /Volumes/ecommerce_analytics_dev/bronze_layer/raw_data
     workspace:
-      host: ${var.databricks_host}
-      # Deploy to user's personal folder for dev
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/dev
 
   # =============================================
@@ -66,8 +62,6 @@ targets:
       catalog_name: ecommerce_analytics_staging
       volume_raw_data: /Volumes/ecommerce_analytics_staging/bronze_layer/raw_data
     workspace:
-      host: ${var.databricks_host}
-      # Deploy to user's folder for staging
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/staging
 
   # =============================================
@@ -79,37 +73,6 @@ targets:
       catalog_name: ecommerce_analytics_prod
       volume_raw_data: /Volumes/ecommerce_analytics_prod/bronze_layer/raw_data
     workspace:
-      host: ${var.databricks_host}
-      # Deploy to Shared folder for production
       root_path: /Workspace/Shared/.bundle/${bundle.name}/prod
     run_as:
-      # For now, run as current user (no service principal in free trial)
       user_name: ${workspace.current_user.userName}
-
-# =============================================
-# SINGLE WORKSPACE DEPLOYMENT NOTES
-# =============================================
-#
-# This configuration deploys all environments to ONE workspace.
-# Environment isolation is achieved via:
-#
-# 1. CATALOGS: Each environment has its own Unity Catalog
-#    - ecommerce_analytics_dev
-#    - ecommerce_analytics_staging
-#    - ecommerce_analytics_prod
-#
-# 2. SCHEMAS: Same schema names across catalogs
-#    - bronze_layer, silver_layer, gold_layer
-#
-# 3. WORKSPACE PATHS: Different bundle deployment paths
-#    - dev/staging: /Workspace/Users/{user}/.bundle/...
-#    - prod: /Workspace/Shared/.bundle/...
-#
-# 4. JOB NAMING: Jobs prefixed with [dev], [staging], [prod]
-#
-# To deploy:
-#   databricks bundle deploy -t dev
-#   databricks bundle deploy -t staging
-#   databricks bundle deploy -t prod
-#
-# =============================================
