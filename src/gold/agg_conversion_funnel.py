@@ -333,7 +333,7 @@ display(
         "session_view_to_cart_rate", "session_cart_to_purchase_rate",
         "cart_abandonment_rate"
     )
-    .orderBy("event_date", ascending=False, "total_sessions", ascending=False)
+    .orderBy(col("event_date").desc(), col("total_sessions").desc())
     .limit(20)
 )
 
