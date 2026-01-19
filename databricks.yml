@@ -1,6 +1,12 @@
 # Databricks Asset Bundles Configuration
 # E-Commerce Analytics Platform
 # ================================
+# Single workspace deployment with catalog-based environment isolation
+#
+# Environments are simulated using Unity Catalog:
+# - dev:     ecommerce_analytics_dev catalog
+# - staging: ecommerce_analytics_staging catalog
+# - prod:    ecommerce_analytics_prod catalog
 
 bundle:
   name: ecommerce-analytics-platform
@@ -9,15 +15,15 @@ bundle:
 include:
   - resources/*.yml
 
-# Workspace configuration
+# Workspace configuration - SINGLE WORKSPACE for all environments
 workspace:
   host: ${var.databricks_host}
 
 # Variables used across all targets
 variables:
   databricks_host:
-    description: "Databricks workspace URL"
-    default: ""
+    description: "Databricks workspace URL (same for all environments)"
+    default: "" # TODO: Set your workspace URL here
   catalog_name:
     description: "Unity Catalog name for this environment"
   schema_bronze:
@@ -32,12 +38,14 @@ variables:
   volume_raw_data:
     description: "Volume path for raw CSV data"
   warehouse_id:
-    description: "SQL Warehouse ID for queries"
-    default: ""
+    description: "SQL Warehouse ID for serverless execution"
+    default: "" # TODO: Set your SQL Warehouse ID here
 
-# Environment-specific targets
+# Environment-specific targets (all in SAME workspace)
 targets:
-  # Development environment
+  # =============================================
+  # Development Environment
+  # =============================================
   dev:
     mode: development
     default: true
@@ -46,9 +54,12 @@ targets:
       volume_raw_data: /Volumes/ecommerce_analytics_dev/bronze_layer/raw_data
     workspace:
       host: ${var.databricks_host}
+      # Deploy to user's personal folder for dev
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/dev
 
-  # Staging environment
+  # =============================================
+  # Staging Environment (same workspace, different catalog)
+  # =============================================
   staging:
     mode: development
     variables:
@@ -56,9 +67,12 @@ targets:
       volume_raw_data: /Volumes/ecommerce_analytics_staging/bronze_layer/raw_data
     workspace:
       host: ${var.databricks_host}
+      # Deploy to user's folder for staging
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/staging
 
-  # Production environment
+  # =============================================
+  # Production Environment (same workspace, different catalog)
+  # =============================================
   prod:
     mode: production
     variables:
@@ -66,8 +80,36 @@ targets:
       volume_raw_data: /Volumes/ecommerce_analytics_prod/bronze_layer/raw_data
     workspace:
       host: ${var.databricks_host}
+      # Deploy to Shared folder for production
       root_path: /Workspace/Shared/.bundle/${bundle.name}/prod
     run_as:
-      # Uncomment and configure for production service principal
-      # service_principal_name: "ecommerce-analytics-sp"
+      # For now, run as current user (no service principal in free trial)
       user_name: ${workspace.current_user.userName}
+
+# =============================================
+# SINGLE WORKSPACE DEPLOYMENT NOTES
+# =============================================
+#
+# This configuration deploys all environments to ONE workspace.
+# Environment isolation is achieved via:
+#
+# 1. CATALOGS: Each environment has its own Unity Catalog
+#    - ecommerce_analytics_dev
+#    - ecommerce_analytics_staging
+#    - ecommerce_analytics_prod
+#
+# 2. SCHEMAS: Same schema names across catalogs
+#    - bronze_layer, silver_layer, gold_layer
+#
+# 3. WORKSPACE PATHS: Different bundle deployment paths
+#    - dev/staging: /Workspace/Users/{user}/.bundle/...
+#    - prod: /Workspace/Shared/.bundle/...
+#
+# 4. JOB NAMING: Jobs prefixed with [dev], [staging], [prod]
+#
+# To deploy:
+#   databricks bundle deploy -t dev
+#   databricks bundle deploy -t staging
+#   databricks bundle deploy -t prod
+#
+# =============================================
